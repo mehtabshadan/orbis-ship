@@ -4,6 +4,18 @@
 import { useUpdater } from '../../hooks/useUpdater';
 import { useOnline } from '../../hooks/useOnline';
 
+interface UpdateInfo {
+  updateAvailable: boolean;
+  localVersion: string | null;
+  latestVersion: string | null;
+  releaseInfo?: {
+    tag_name: string;
+    name: string;
+    published_at: string;
+    body: string;
+  };
+}
+
 export default function UpdaterExamplePage() {
   const { isOnline, wasOffline } = useOnline();
   
@@ -20,7 +32,7 @@ export default function UpdaterExamplePage() {
     performUpdate,
   } = useUpdater({
     checkOnConnect: true,
-    onUpdateAvailable: (info: any) => {
+    onUpdateAvailable: (info: UpdateInfo) => {
       console.log('🔔 Update available:', info);
     },
     onUpdateStart: () => {

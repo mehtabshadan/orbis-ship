@@ -15,7 +15,7 @@ function getUpdaterInstance() {
   return updaterInstance;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const updater = getUpdaterInstance();
     const updateInfo = await updater.checkForUpdates();

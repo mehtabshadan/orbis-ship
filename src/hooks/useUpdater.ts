@@ -81,9 +81,7 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
         if (info.updateAvailable) {
           onUpdateAvailable?.(info);
           
-          if (autoUpdate) {
-            await performUpdate();
-          }
+          // Note: We'll call performUpdate separately to avoid circular dependency
         }
       } else {
         throw new Error(result.message || 'Failed to check for updates');
@@ -99,7 +97,7 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
     } finally {
       setIsChecking(false);
     }
-  }, [isChecking, onUpdateAvailable, onUpdateError, autoUpdate]);
+  }, [isChecking, onUpdateAvailable, onUpdateError]);
 
   const performUpdate = useCallback(async () => {
     if (isUpdating) return false;
@@ -185,6 +183,13 @@ export function useUpdater(options: UseUpdaterOptions = {}) {
       abortControllerRef.current = new AbortController();
     }
   }, [isChecking]);
+
+  // Handle auto-update when updates are available
+  useEffect(() => {
+    if (autoUpdate && updateInfo?.updateAvailable && !isUpdating) {
+      performUpdate();
+    }
+  }, [autoUpdate, updateInfo?.updateAvailable, isUpdating, performUpdate]);
 
   return {
     // State

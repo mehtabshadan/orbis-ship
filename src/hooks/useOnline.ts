@@ -48,7 +48,7 @@ export function useOnline(options: UseOnlineOptions = {}) {
         } else if (!isConnected && isOnline) {
           handleOffline();
         }
-      } catch (error) {
+      } catch {
         if (isOnline) {
           handleOffline();
         }

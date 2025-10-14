@@ -1,6 +1,4 @@
 // Updater initialization - call this in your app startup
-'use server';
-
 import updaterService from './updater-service';
 
 export async function initializeUpdater() {
