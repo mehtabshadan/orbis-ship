@@ -1,0 +1,3 @@
+@echo off
+echo Starting build process...
+call "builder\start-build.bat" %*
