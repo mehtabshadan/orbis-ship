@@ -146,14 +146,16 @@ export class EnvironmentService {
      * Get database encryption key
      */
     public getDatabaseEncryptionKey(): string {
-        return this.get('DATABASE_ENCRYPTION_KEY');
-    }
-
-    /**
-     * Get database path override (optional)
-     */
-    public getDatabasePath(): string | null {
-        return this.getOptional('DATABASE_PATH') || null;
+        try {
+            return this.get('DATABASE_ENCRYPTION_KEY');
+        } catch (error) {
+            // If not found and in development, provide a default
+            if (this.environment === 'development') {
+                console.warn('⚠️  DATABASE_ENCRYPTION_KEY not found, using default for development');
+                return 'dev_encryption_key_2024_development_orbis_secure';
+            }
+            throw error;
+        }
     }
 
     /**

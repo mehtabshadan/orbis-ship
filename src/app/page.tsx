@@ -25,6 +25,25 @@ export default function Home() {
           </li>
         </ol>
 
+        {/* Navigation Section */}
+        <div className="flex flex-col gap-4 items-center w-full max-w-md">
+          <h2 className="text-lg font-semibold text-center">Application Pages</h2>
+          <div className="flex flex-col gap-2 w-full">
+            <a
+              className="rounded-lg border border-solid border-gray-300 dark:border-gray-600 transition-colors flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 font-medium text-sm h-10 px-4 w-full"
+              href="/users"
+            >
+              👥 Users Management
+            </a>
+            <a
+              className="rounded-lg border border-solid border-gray-300 dark:border-gray-600 transition-colors flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 font-medium text-sm h-10 px-4 w-full"
+              href="/api/database"
+            >
+              🗄️ Database Status
+            </a>
+          </div>
+        </div>
+
         <div className="flex gap-4 items-center flex-col sm:flex-row">
           <a
             className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"

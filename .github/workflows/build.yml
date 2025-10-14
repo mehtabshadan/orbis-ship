@@ -1,4 +1,4 @@
-name: Build and Package Next.js Application
+name: Build Next.js Application
 
 on:
   push:
@@ -8,8 +8,6 @@ on:
   pull_request:
     branches:
       - main
-  release:
-    types: [created]
   workflow_dispatch:
 
 jobs:
@@ -27,45 +25,32 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Next.js application
         run: npm run build
         env:
           NODE_ENV: production
 
-      - name: Run deployment packager
+      - name: Get version from package.json
+        id: get_version
         shell: pwsh
         run: |
-          # Make the script executable
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
-          
-          # Run the packager script with parameters
-          & ".\builder\build-package.ps1" -OutputPath "${{ github.workspace }}\dist" -OpenFolder $false
+          $packageJson = Get-Content "package.json" | ConvertFrom-Json
+          $version = $packageJson.version
+          Write-Output "VERSION=$version" >> $env:GITHUB_ENV
+          Write-Output "Package version: $version"
+
+      - name: Create build archive
+        shell: pwsh
+        run: |
+          $archiveName = "orbis-${{ env.VERSION }}.zip"
+          Compress-Archive -Path ".next/*", "public/*", "package.json" -DestinationPath $archiveName -Force
+          Write-Output "Created build archive: $archiveName"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: orbis-app-package
-          path: dist/
+          name: orbis-${{ env.VERSION }}
+          path: orbis-${{ env.VERSION }}.zip
           retention-days: 30
-
-      - name: Create Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: dist/*.zip
-          body_path: RELEASE_NOTES.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./dist/
-          asset_name: OrbisApp-Release
-          asset_content_type: application/zip

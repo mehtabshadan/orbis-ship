@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { DatabaseManager } from "../../lib/database";
-import { UpdateNotification } from "../components/UpdateNotification";
-import { initializeUpdater } from "../../lib/updater-init";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,25 +22,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-  // Only initialize database in browser/runtime, not during build
-  if (typeof window !== 'undefined') {
-    const database = DatabaseManager.getInstance();
-    database.initializeDatabase().catch(console.error);
-  }
-
-  // Initialize updater service (server-side only)
-  if (typeof window === 'undefined') {
-    initializeUpdater().catch(console.error);
-  }
-
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <UpdateNotification />
       </body>
     </html>
   );
