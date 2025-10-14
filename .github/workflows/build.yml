@@ -225,20 +225,23 @@ jobs:
           Write-Host "OK: Version info created" -ForegroundColor Green
           Write-Host ""
           
-          # Save package info for next step
-          "PackageDir=$packageDir" | Out-File -FilePath "package-info.txt" -Encoding UTF8
-          "PackageName=$PackageName" | Add-Content -Path "package-info.txt"
+          # Save package info for next step (use environment variable instead)
+          Write-Host "PACKAGE_DIR=$packageDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding UTF8 -Append
+          Write-Host "PACKAGE_NAME=$PackageName" | Out-File -FilePath $env:GITHUB_ENV -Encoding UTF8 -Append
 
       - name: Create ZIP package
         shell: pwsh
         run: |
           Write-Host "Step 11: Creating ZIP package..." -ForegroundColor Cyan
           
-          $packageInfo = Get-Content "package-info.txt" | ConvertFrom-StringData
-          $packageDir = $packageInfo.PackageDir
-          $PackageName = $packageInfo.PackageName
+          $packageDir = "${{ env.PACKAGE_DIR }}"
+          $PackageName = "${{ env.PACKAGE_NAME }}"
           $OutputPath = "dist"
           $zipFile = Join-Path $OutputPath "$PackageName.zip"
+          
+          Write-Host "Package Dir: $packageDir" -ForegroundColor Gray
+          Write-Host "Package Name: $PackageName" -ForegroundColor Gray
+          Write-Host "ZIP File: $zipFile" -ForegroundColor Gray
           
           Write-Host "Cleaning up problematic files..." -ForegroundColor Gray
           try {
