@@ -14,6 +14,11 @@ on:
     types: [created, published]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: read
+  id-token: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -84,7 +89,7 @@ jobs:
           retention-days: 30
 
       - name: Create Release
-        if: github.ref_type == 'tag' || github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: orbis-${{ env.VERSION }}.zip
@@ -112,26 +117,27 @@ jobs:
             
             ---
             Built with ❤️ using GitHub Actions
-          tag_name: ${{ github.ref_name || format('v{0}', env.VERSION) }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Latest Release (for main branch)
+      - name: Create Latest Development Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           files: orbis-${{ env.VERSION }}.zip
-          name: "Orbis Ship v${{ env.VERSION }} (Latest)"
+          name: "Orbis Ship Latest (v${{ env.VERSION }})"
           body: |
-            ## Orbis Ship Latest Release v${{ env.VERSION }}
+            ## Orbis Ship Latest Development Build
             
-            **🔄 Automatically created from main branch**
+            **🔄 Automatically updated from main branch**
+            **Version:** v${{ env.VERSION }}
             **Built from commit:** ${{ github.sha }}
             **Build date:** ${{ github.run_started_at }}
             
-            This is the latest development build from the main branch.
+            This is the latest development build from the main branch. This release is automatically updated with each push to main.
             
             ### 📦 What's included:
             - Complete Next.js standalone application
@@ -145,8 +151,9 @@ jobs:
             
             ---
             Built with ❤️ using GitHub Actions
-          tag_name: v${{ env.VERSION }}
+          tag_name: latest
           draft: false
-          prerelease: false
+          prerelease: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
