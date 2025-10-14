@@ -34,21 +34,250 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Run build packager script
+      - name: Copy static assets to standalone
         shell: pwsh
         run: |
-          # Set execution policy
-          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+          Write-Host "Step 3: Copying static assets to standalone..." -ForegroundColor Cyan
           
-          # Run the packager script from builder folder
-          $scriptPath = ".\builder\build-packager.ps1"
+          if (-not (Test-Path ".next\standalone\.next")) {
+              New-Item -ItemType Directory -Path ".next\standalone\.next" -Force | Out-Null
+          }
           
-          Write-Host "Running packager script: $scriptPath"
-          Write-Host "Output path: dist"
+          if (Test-Path ".next\static") {
+              Copy-Item -Path ".next\static" -Destination ".next\standalone\.next\static" -Recurse -Force
+              Write-Host "OK: Static assets copied to standalone" -ForegroundColor Green
+          } else {
+              Write-Host "WARN: No static assets found" -ForegroundColor Yellow
+          }
           
-          & $scriptPath -OutputPath "dist" -SkipBuild $false -OpenFolder $false
+          if (Test-Path "public") {
+              Copy-Item -Path "public" -Destination ".next\standalone\public" -Recurse -Force
+              Write-Host "OK: Public assets copied to standalone" -ForegroundColor Green
+          }
+
+      - name: Optimize standalone files
+        shell: pwsh
+        run: |
+          Write-Host "Step 4: Optimizing standalone files..." -ForegroundColor Cyan
           
-          Write-Host "Packager script completed successfully"
+          $devDependenciesToRemove = @()
+          
+          if (Test-Path "package.json") {
+              try {
+                  $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+                  if ($packageJson.devDependencies) {
+                      foreach ($dep in $packageJson.devDependencies.PSObject.Properties) {
+                          $depName = $dep.Name
+                          $depPath = ".next\standalone\node_modules\$depName"
+                          $devDependenciesToRemove += $depPath
+                      }
+                  }
+              } catch {
+                  Write-Host "WARN: Could not read devDependencies: $($_.Exception.Message)" -ForegroundColor Yellow
+              }
+          }
+          
+          $additionalDevDeps = @(
+              ".next\standalone\node_modules\webpack",
+              ".next\standalone\node_modules\terser",
+              ".next\standalone\node_modules\watchpack",
+              ".next\standalone\node_modules\eslint-scope",
+              ".next\standalone\node_modules\@babel"
+          )
+          $devDependenciesToRemove += $additionalDevDeps
+          
+          foreach ($dep in $devDependenciesToRemove) {
+              if (Test-Path $dep) {
+                  Remove-Item $dep -Recurse -Force -ErrorAction SilentlyContinue
+              }
+          }
+          
+          $foldersToRemove = @("test", "tests", "docs", "documentation", "__tests__", "spec")
+          Get-ChildItem ".next\standalone\node_modules" -Directory -Recurse -ErrorAction SilentlyContinue | Where-Object { 
+              $_.Name -in $foldersToRemove 
+          } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          
+          Get-ChildItem ".next\standalone\node_modules" -File -Recurse -ErrorAction SilentlyContinue | Where-Object { 
+              $_.Extension -in @(".map", ".ts", ".tsx") 
+          } | Remove-Item -Force -ErrorAction SilentlyContinue
+          
+          Get-ChildItem ".next\standalone" -File -Recurse -Filter "*.nft.json" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          
+          Write-Host "OK: Standalone optimization complete!" -ForegroundColor Green
+
+      - name: Verify required files
+        shell: pwsh
+        run: |
+          Write-Host "Step 5: Verifying required files..." -ForegroundColor Cyan
+          
+          $requiredFiles = @(".next\standalone\server.js")
+          $missingFiles = @()
+          
+          foreach ($file in $requiredFiles) {
+              if (-not (Test-Path $file)) {
+                  $missingFiles += $file
+                  Write-Host "  MISSING: $file" -ForegroundColor Red
+              } else {
+                  Write-Host "  FOUND: $file" -ForegroundColor Green
+              }
+          }
+          
+          if ($missingFiles.Count -gt 0) {
+              Write-Host "ERROR: Missing required files" -ForegroundColor Red
+              exit 1
+          }
+
+      - name: Create deployment package
+        shell: pwsh
+        run: |
+          Write-Host "Step 6: Creating deployment package..." -ForegroundColor Cyan
+          
+          $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+          $PackageName = "OrbisApp-$timestamp"
+          $OutputPath = "dist"
+          $packageDir = Join-Path $OutputPath $PackageName
+          
+          if (-not (Test-Path $OutputPath)) {
+              New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
+          }
+          
+          if (Test-Path $packageDir) {
+              Remove-Item $packageDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          
+          Write-Host "Package directory created: $packageDir" -ForegroundColor Green
+          Write-Host ""
+          
+          Write-Host "Step 7: Copying application files..." -ForegroundColor Cyan
+          
+          $standaloneSource = ".next\standalone"
+          $standaloneTarget = Join-Path $packageDir ".next\standalone"
+          if (Test-Path $standaloneSource) {
+              Copy-Item -Path $standaloneSource -Destination $standaloneTarget -Recurse -Force
+              Write-Host "Copying standalone application..." -ForegroundColor Gray
+          }
+          
+          $staticSource = ".next\static"
+          $staticTarget = Join-Path $packageDir ".next\static"
+          if (Test-Path $staticSource) {
+              Copy-Item -Path $staticSource -Destination $staticTarget -Recurse -Force
+              Write-Host "Copying static files..." -ForegroundColor Gray
+          }
+          
+          $publicSource = "public"
+          $publicTarget = Join-Path $packageDir "public"
+          if (Test-Path $publicSource) {
+              Copy-Item -Path $publicSource -Destination $publicTarget -Recurse -Force
+              Write-Host "Copying public files..." -ForegroundColor Gray
+          }
+          
+          Write-Host "OK: Application files copied successfully" -ForegroundColor Green
+          Write-Host ""
+          
+          Write-Host "Step 8: Copying script files..." -ForegroundColor Cyan
+          
+          $scriptFiles = @(
+              @{ Source = "builder\run.bat"; Dest = "run.bat" },
+              @{ Source = "builder\setup.ps1"; Dest = "setup.ps1" }
+          )
+          
+          foreach ($file in $scriptFiles) {
+              if (Test-Path $file.Source) {
+                  Copy-Item $file.Source (Join-Path $packageDir $file.Dest) -Force
+                  Write-Host "  Copied: $($file.Source)" -ForegroundColor Gray
+              } else {
+                  Write-Host "  WARNING: File not found: $($file.Source)" -ForegroundColor Yellow
+              }
+          }
+          
+          Write-Host "OK: Deployment scripts copied successfully" -ForegroundColor Green
+          Write-Host ""
+          
+          Write-Host "Step 10: Creating version info..." -ForegroundColor Cyan
+          
+          $packageJsonPath = "package.json"
+          $packageName = "orbis-ship"
+          $packageVersion = "1.0.0"
+          
+          if (Test-Path $packageJsonPath) {
+              try {
+                  $packageJson = Get-Content $packageJsonPath -Raw | ConvertFrom-Json
+                  $packageName = $packageJson.name
+                  $packageVersion = $packageJson.version
+                  Write-Host "Read from package.json: $packageName v$packageVersion" -ForegroundColor Gray
+              } catch {
+                  Write-Host "WARN: Could not read package.json, using defaults" -ForegroundColor Yellow
+              }
+          }
+          
+          $versionInfo = @{
+              CreatedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+              Files = (Get-ChildItem $packageDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+              TotalSize = [math]::Round((Get-ChildItem $packageDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
+              Version = $packageVersion
+              Name = $packageName
+          } | ConvertTo-Json -Depth 2
+          
+          $versionInfoFile = Join-Path $packageDir "version.json"
+          $versionInfo | Out-File -FilePath $versionInfoFile -Encoding UTF8
+          
+          Write-Host "OK: Version info created" -ForegroundColor Green
+          Write-Host ""
+          
+          # Save package info for next step
+          "PackageDir=$packageDir" | Out-File -FilePath "package-info.txt" -Encoding UTF8
+          "PackageName=$PackageName" | Add-Content -Path "package-info.txt"
+
+      - name: Create ZIP package
+        shell: pwsh
+        run: |
+          Write-Host "Step 11: Creating ZIP package..." -ForegroundColor Cyan
+          
+          $packageInfo = Get-Content "package-info.txt" | ConvertFrom-StringData
+          $packageDir = $packageInfo.PackageDir
+          $PackageName = $packageInfo.PackageName
+          $OutputPath = "dist"
+          $zipFile = Join-Path $OutputPath "$PackageName.zip"
+          
+          Write-Host "Cleaning up problematic files..." -ForegroundColor Gray
+          try {
+              Get-ChildItem $packageDir -Recurse -Filter "*.nft.json" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+              Get-ChildItem $packageDir -Recurse -ErrorAction SilentlyContinue | Where-Object { 
+                  $_.Attributes -match "ReparsePoint" 
+              } | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+              Write-Host "OK: Cleanup completed" -ForegroundColor Green
+          } catch {
+              Write-Host "WARN: Cleanup had issues: $($_.Exception.Message)" -ForegroundColor Yellow
+          }
+          
+          try {
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              [System.IO.Compression.ZipFile]::CreateFromDirectory($packageDir, $zipFile)
+              
+              $zipSize = [math]::Round((Get-Item $zipFile).Length / 1MB, 2)
+              Write-Host "OK: ZIP package created: $zipFile ($zipSize MB)" -ForegroundColor Green
+          } catch {
+              Write-Host "WARN: Could not create ZIP file: $($_.Exception.Message)" -ForegroundColor Yellow
+              Write-Host "      The unzipped package in $packageDir is still usable" -ForegroundColor Gray
+          }
+
+      - name: Display build summary
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=============================================" -ForegroundColor Cyan
+          Write-Host "    BUILD & PACKAGE COMPLETED!" -ForegroundColor Green
+          Write-Host "=============================================" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "Output location: $(Resolve-Path dist)" -ForegroundColor Gray
+          Write-Host ""
+          Write-Host "Package Contents:" -ForegroundColor White
+          Write-Host "  * .next/standalone/ - Next.js application" -ForegroundColor Gray
+          Write-Host "  * run.bat - Server startup script" -ForegroundColor Gray
+          Write-Host "  * setup.ps1 - Interactive installer" -ForegroundColor Gray
+          Write-Host "  * version.json - Package version info" -ForegroundColor Gray
+          Write-Host ""
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
