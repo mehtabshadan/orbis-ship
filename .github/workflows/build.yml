@@ -139,7 +139,6 @@ jobs:
 
           ---
           Built with ❤️ using GitHub Actions" `
-            --prerelease `
             --latest
 
           Write-Output "Successfully created release 'latest'"
