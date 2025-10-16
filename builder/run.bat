@@ -1,45 +1,64 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
-REM Get the directory where this batch file is located (which is the app directory)
-set "SCRIPT_DIR=%~dp0"
-set "APP_DIR=%SCRIPT_DIR%"
-set "STANDALONE_DIR=%APP_DIR%\.next\standalone"
-set "LOG_DIR=%APP_DIR%\logs"
-set "LOG_FILE=%LOG_DIR%\service.log"
+echo ============================================
+echo           Orbis Ship Application
+echo ============================================
+echo.
 
-REM Create logs directory if it doesn't exist
-if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+REM Get the directory where this batch file is located
+REM This will be the application root when deployed
+set "APP_DIR=%~dp0"
+set "STANDALONE_DIR=%APP_DIR%.next\standalone"
 
-REM Log startup information
-echo. >> "%LOG_FILE%"
-echo ============================================== >> "%LOG_FILE%"
-echo Service starting at %date% %time% >> "%LOG_FILE%"
-echo Script Directory: %SCRIPT_DIR% >> "%LOG_FILE%"
-echo App Directory: %APP_DIR% >> "%LOG_FILE%"
-echo Standalone Directory: %STANDALONE_DIR% >> "%LOG_FILE%"
-echo ============================================== >> "%LOG_FILE%"
+echo App Directory: !APP_DIR!
+echo Standalone Directory: !STANDALONE_DIR!
+echo.
 
 REM Check if standalone directory exists
-if not exist "%STANDALONE_DIR%" (
-    echo ERROR: Standalone directory not found: %STANDALONE_DIR% >> "%LOG_FILE%"
-    echo ERROR: Please build the Next.js application first >> "%LOG_FILE%"
+if not exist "!STANDALONE_DIR!" (
+    echo ERROR: Standalone directory not found: !STANDALONE_DIR!
+    echo ERROR: Please ensure the application was built correctly
+    echo.
+    echo Expected structure:
+    echo   !APP_DIR!
+    echo   ├── .next\
+    echo   │   └── standalone\
+    echo   │       └── server.js
+    echo   ├── public\
+    echo   ├── run.bat (this file)
+    echo   └── setup.ps1
+    echo.
+    pause
     exit /b 1
 )
 
 REM Check if server.js exists
-if not exist "%STANDALONE_DIR%\server.js" (
-    echo ERROR: server.js not found in %STANDALONE_DIR% >> "%LOG_FILE%"
-    echo ERROR: Please build the Next.js application with standalone output >> "%LOG_FILE%"
+if not exist "!STANDALONE_DIR!\server.js" (
+    echo ERROR: server.js not found in !STANDALONE_DIR!
+    echo ERROR: Please ensure the application was built with standalone output
+    echo.
+    pause
     exit /b 1
 )
 
-REM Change to standalone directory
-cd /d "%STANDALONE_DIR%"
+REM Check if Node.js is available
+node --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Node.js is not installed or not in PATH
+    echo Please install Node.js from https://nodejs.org/
+    echo.
+    pause
+    exit /b 1
+)
 
-REM Log current directory and start server
-echo Current Directory: %CD% >> "%LOG_FILE%"
-echo Starting Node.js server... >> "%LOG_FILE%"
+echo Starting Orbis Ship application...
+echo Server will be available at: http://localhost:3000
+echo Press Ctrl+C to stop the server
+echo.
 
-REM Start the Node.js server and redirect output to log
-node server.js >> "%LOG_FILE%" 2>&1
+REM Change to standalone directory and start server
+cd /d "!STANDALONE_DIR!"
+echo Starting server from: !CD!
+echo.
+node server.js
