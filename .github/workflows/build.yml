@@ -18,6 +18,9 @@ permissions:
   contents: write
   actions: read
   id-token: write
+  packages: write
+  pull-requests: write
+  issues: write
 
 jobs:
   build:
@@ -88,72 +91,91 @@ jobs:
           path: orbis-${{ env.VERSION }}.zip
           retention-days: 30
 
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: orbis-${{ env.VERSION }}.zip
-          name: "Orbis Ship v${{ env.VERSION }}"
-          body: |
-            ## Orbis Ship Release v${{ env.VERSION }}
-            
-            **Built from commit:** ${{ github.sha }}
-            **Build date:** ${{ github.run_started_at }}
-            
-            ### 📦 What's included:
-            - Complete Next.js standalone application
-            - Public static assets
-            - Ready for deployment on Windows machines
-            
-            ### 🚀 Installation:
-            1. Download the `orbis-${{ env.VERSION }}.zip` file
-            2. Extract to your desired location
-            3. Run the extracted application
-            
-            ### 📊 Package Info:
-            - **Size:** ~18MB
-            - **Runtime:** Node.js (standalone, no installation required)
-            - **Platform:** Windows
-            
-            ---
-            Built with ❤️ using GitHub Actions
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Latest Development Release
+      - name: Create Release using GitHub CLI
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: orbis-${{ env.VERSION }}.zip
-          name: "Orbis Ship Latest (v${{ env.VERSION }})"
-          body: |
-            ## Orbis Ship Latest Development Build
-            
-            **🔄 Automatically updated from main branch**
-            **Version:** v${{ env.VERSION }}
-            **Built from commit:** ${{ github.sha }}
-            **Build date:** ${{ github.run_started_at }}
-            
-            This is the latest development build from the main branch. This release is automatically updated with each push to main.
-            
-            ### 📦 What's included:
-            - Complete Next.js standalone application
-            - Public static assets
-            - Ready for deployment on Windows machines
-            
-            ### 🚀 Installation:
-            1. Download the `orbis-${{ env.VERSION }}.zip` file
-            2. Extract to your desired location
-            3. Run the extracted application
-            
-            ---
-            Built with ❤️ using GitHub Actions
-          tag_name: latest
-          draft: false
-          prerelease: true
-          make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          # Set up GitHub CLI authentication
+          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+          
+          # Check if release already exists
+          $releaseExists = $false
+          try {
+            gh release view "latest" --repo "${{ github.repository }}" | Out-Null
+            $releaseExists = $true
+            Write-Output "Release 'latest' already exists, will update it"
+          } catch {
+            Write-Output "Release 'latest' does not exist, will create it"
+          }
+          
+          if ($releaseExists) {
+            # Delete existing release
+            gh release delete "latest" --repo "${{ github.repository }}" --yes
+            Write-Output "Deleted existing 'latest' release"
+          }
+          
+          # Create new release
+          gh release create "latest" "orbis-${{ env.VERSION }}.zip" `
+            --repo "${{ github.repository }}" `
+            --title "Orbis Ship Latest (v${{ env.VERSION }})" `
+            --notes "## Orbis Ship Latest Development Build
+
+          **🔄 Automatically updated from main branch**
+          **Version:** v${{ env.VERSION }}
+          **Built from commit:** ${{ github.sha }}
+          **Build date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+
+          This is the latest development build from the main branch.
+
+          ### 📦 What's included:
+          - Complete Next.js standalone application
+          - Public static assets  
+          - Ready for deployment on Windows machines
+
+          ### 🚀 Installation:
+          1. Download the orbis-${{ env.VERSION }}.zip file
+          2. Extract to your desired location
+          3. Run the extracted application
+
+          ---
+          Built with ❤️ using GitHub Actions" `
+            --prerelease `
+            --latest
+
+          Write-Output "Successfully created release 'latest'"
+
+      - name: Create Tagged Release using GitHub CLI  
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # Set up GitHub CLI authentication
+          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+          
+          # Create release for the tag
+          gh release create "${{ github.ref_name }}" "orbis-${{ env.VERSION }}.zip" `
+            --repo "${{ github.repository }}" `
+            --title "Orbis Ship v${{ env.VERSION }}" `
+            --notes "## Orbis Ship Release v${{ env.VERSION }}
+
+          **Built from commit:** ${{ github.sha }}
+          **Build date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+
+          ### 📦 What's included:
+          - Complete Next.js standalone application
+          - Public static assets
+          - Ready for deployment on Windows machines
+
+          ### 🚀 Installation:
+          1. Download the orbis-${{ env.VERSION }}.zip file
+          2. Extract to your desired location  
+          3. Run the extracted application
+
+          ### 📊 Package Info:
+          - **Size:** ~18MB
+          - **Runtime:** Node.js (standalone, no installation required)
+          - **Platform:** Windows
+
+          ---
+          Built with ❤️ using GitHub Actions"
+
+          Write-Output "Successfully created tagged release '${{ github.ref_name }}'"
