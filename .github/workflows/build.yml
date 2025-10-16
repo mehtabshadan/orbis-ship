@@ -62,7 +62,7 @@ jobs:
           $packageDir = "package"
           New-Item -ItemType Directory -Force -Path $packageDir
           
-          # Copy only the two essential folders as per build-packager.ps1
+          # Copy the essential application folders
           
           # 1. Copy .next/standalone directory (the main application)
           if (Test-Path ".next/standalone") {
@@ -70,11 +70,96 @@ jobs:
             Write-Output "Copied .next/standalone directory"
           }
           
-          # 2. Copy public directory (static assets)
+          # 2. Copy .next/static directory (static assets)
+          if (Test-Path ".next/static") {
+            Copy-Item -Path ".next/static" -Destination "$packageDir/.next/static" -Recurse -Force
+            Write-Output "Copied .next/static directory"
+          }
+          
+          # 3. Copy public directory (static assets)
           if (Test-Path "public") {
             Copy-Item -Path "public" -Destination "$packageDir/public" -Recurse -Force
             Write-Output "Copied public directory"
           }
+          
+          # Copy deployment scripts from builder directory
+          
+          # 4. Copy run.bat (application launcher)
+          if (Test-Path "builder/run.bat") {
+            Copy-Item -Path "builder/run.bat" -Destination "$packageDir/run.bat" -Force
+            Write-Output "Copied run.bat"
+          }
+          
+          # 5. Copy setup.ps1 (environment setup script)
+          if (Test-Path "builder/setup.ps1") {
+            Copy-Item -Path "builder/setup.ps1" -Destination "$packageDir/setup.ps1" -Force
+            Write-Output "Copied setup.ps1"
+          }
+          
+          # Create version.json file with build information
+          $versionInfo = @{
+            name = "orbis-ship"
+            version = "${{ env.VERSION }}"
+            buildDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+            buildCommit = "${{ github.sha }}"
+            buildBranch = "${{ github.ref_name }}"
+            buildNumber = "${{ github.run_number }}"
+            platform = "windows"
+            runtime = "node-standalone"
+            size = "~18MB"
+          } | ConvertTo-Json -Depth 2
+          
+          $versionInfo | Out-File -FilePath "$packageDir/version.json" -Encoding UTF8
+          Write-Output "Created version.json"
+          
+          # Create a README for deployment
+          $readmeLines = @(
+            "# Orbis Ship Application - v${{ env.VERSION }}",
+            "",
+            "This package contains the complete Orbis Ship application ready for deployment.",
+            "",
+            "## Quick Start",
+            "",
+            "1. Setup Environment (Run as Administrator):",
+            "   .\setup.ps1",
+            "",
+            "2. Start Application:",
+            "   .\run.bat",
+            "",
+            "## Package Contents",
+            "",
+            "- .next/ - Next.js application build",
+            "  - standalone/ - Complete standalone application", 
+            "  - static/ - Static assets and chunks",
+            "- public/ - Public static files",
+            "- run.bat - Application launcher script",
+            "- setup.ps1 - Environment setup script", 
+            "- version.json - Build and version information",
+            "- README.md - This file",
+            "",
+            "## System Requirements",
+            "",
+            "- Windows 10/11 or Windows Server 2016+",
+            "- No Node.js installation required (standalone build)",
+            "- PowerShell 5.1+ (for setup script)",
+            "",
+            "## Build Information",
+            "",
+            "- Version: ${{ env.VERSION }}",
+            "- Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')",
+            "- Commit: ${{ github.sha }}",
+            "- Branch: ${{ github.ref_name }}",
+            "",
+            "---",
+            "Built with ❤️ using GitHub Actions"
+          )
+          
+          $readmeLines | Out-File -FilePath "$packageDir/README.md" -Encoding UTF8
+          Write-Output "Created README.md"
+          
+          # Show package contents
+          Write-Output "Package contents:"
+          Get-ChildItem $packageDir -Recurse -Name | Sort-Object | ForEach-Object { Write-Output "  $_" }
           
           # Create ZIP from the package directory
           Compress-Archive -Path "$packageDir/*" -DestinationPath $archiveName -Force
