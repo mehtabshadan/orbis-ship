@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableDelayedExpansion
 
 echo ============================================
@@ -17,17 +18,17 @@ echo.
 
 REM Check if standalone directory exists
 if not exist "!STANDALONE_DIR!" (
-    echo ERROR: Standalone directory not found: !STANDALONE_DIR!
-    echo ERROR: Please ensure the application was built correctly
+    echo [ERROR] Standalone directory not found: !STANDALONE_DIR!
+    echo [ERROR] Please ensure the application was built correctly
     echo.
     echo Expected structure:
     echo   !APP_DIR!
-    echo   ├── .next\
-    echo   │   └── standalone\
-    echo   │       └── server.js
-    echo   ├── public\
-    echo   ├── run.bat (this file)
-    echo   └── setup.ps1
+    echo   +-- .next\
+    echo   ^|   +-- standalone\
+    echo   ^|       +-- server.js
+    echo   +-- public\
+    echo   +-- run.bat ^(this file^)
+    echo   +-- setup.ps1
     echo.
     pause
     exit /b 1
@@ -35,30 +36,42 @@ if not exist "!STANDALONE_DIR!" (
 
 REM Check if server.js exists
 if not exist "!STANDALONE_DIR!\server.js" (
-    echo ERROR: server.js not found in !STANDALONE_DIR!
-    echo ERROR: Please ensure the application was built with standalone output
+    echo [ERROR] server.js not found in !STANDALONE_DIR!
+    echo [ERROR] Please ensure the application was built with standalone output
     echo.
     pause
     exit /b 1
 )
 
 REM Check if Node.js is available
+echo [INFO] Checking Node.js installation...
 node --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Node.js is not installed or not in PATH
-    echo Please install Node.js from https://nodejs.org/
+    echo [ERROR] Node.js is not installed or not in PATH
+    echo [INFO] Please install Node.js from https://nodejs.org/
     echo.
     pause
     exit /b 1
+) else (
+    for /f "tokens=*" %%i in ('node --version') do set NODE_VERSION=%%i
+    echo [OK] Node.js !NODE_VERSION! detected
 )
 
-echo Starting Orbis Ship application...
-echo Server will be available at: http://localhost:3000
-echo Press Ctrl+C to stop the server
+echo.
+echo [INFO] Starting Orbis Ship application...
+echo [INFO] Server will be available at: http://localhost:3000
+echo [INFO] Press Ctrl+C to stop the server
+echo.
+echo [INFO] To install as Windows service, run: setup.ps1
 echo.
 
 REM Change to standalone directory and start server
 cd /d "!STANDALONE_DIR!"
-echo Starting server from: !CD!
+echo [INFO] Starting server from: !CD!
 echo.
+echo ============================================
+echo           APPLICATION STARTING
+echo ============================================
+echo.
+
 node server.js

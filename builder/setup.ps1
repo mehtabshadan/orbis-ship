@@ -9,6 +9,10 @@
 #
 # ===========================================
 
+# Set console encoding to UTF-8 to prevent character display issues
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+
 # Configuration
 $taskName = "Orbis Ship"
 $taskDisplayName = "Orbis Ship Next.js Server"
@@ -35,11 +39,21 @@ $logDir = Join-Path $baseDir "logs"
 # ===========================================
 # STEP 1: Check Administrator Privileges
 # ===========================================
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "ORBIS SHIP SETUP - WINDOWS SERVICE INSTALLER" -ForegroundColor White
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host ""
+
+Write-Host "App Directory: $baseDir" -ForegroundColor Green
+Write-Host "Standalone Directory: $standaloneDir" -ForegroundColor Green
+Write-Host ""
+
 Write-Host "Checking administrator privileges..." -ForegroundColor Cyan
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
-    Write-Host "Administrator privileges required. Requesting elevation..." -ForegroundColor Yellow
+    Write-Host "ADMINISTRATOR PRIVILEGES REQUIRED!" -ForegroundColor Red
+    Write-Host "Requesting elevation..." -ForegroundColor Yellow
     
     # Get the script path and its directory
     $scriptPath = $MyInvocation.MyCommand.Path
@@ -56,23 +70,23 @@ if (-not $isAdmin) {
         Write-Host "ERROR: Cannot auto-elevate when running commands directly in console." -ForegroundColor Red
         Write-Host "Please save this as a .ps1 file and run it, or manually run PowerShell as Administrator." -ForegroundColor Yellow
         Read-Host "Press Enter to exit"
-        exit
+        exit 1
     }
     
     try {
         # Restart the script with admin privileges, passing the script directory
         Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" `"$currentDir`""
-        exit
+        exit 0
     }
     catch {
         Write-Host "ERROR: Failed to request administrator privileges." -ForegroundColor Red
         Write-Host "Please right-click PowerShell and select 'Run as Administrator'" -ForegroundColor Yellow
         Read-Host "Press Enter to exit"
-        exit
+        exit 1
     }
 }
 
-Write-Host "Running with administrator privileges" -ForegroundColor Green
+Write-Host "[OK] Running with administrator privileges" -ForegroundColor Green
 Write-Host ""
 
 # ===========================================
@@ -80,30 +94,46 @@ Write-Host ""
 # ===========================================
 Write-Host "Verifying server files..." -ForegroundColor Cyan
 
+$allFilesExist = $true
+
 if (-not (Test-Path $serverFile)) {
-    Write-Host "ERROR: server.js not found at: $serverFile" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit
+    Write-Host "[ERROR] server.js not found at: $serverFile" -ForegroundColor Red
+    $allFilesExist = $false
+}
+else {
+    Write-Host "[OK] Found server.js at: $serverFile" -ForegroundColor Green
 }
 
 if (-not (Test-Path $batchFile)) {
-    Write-Host "ERROR: run.bat not found at: $batchFile" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit
+    Write-Host "[ERROR] run.bat not found at: $batchFile" -ForegroundColor Red
+    $allFilesExist = $false
+}
+else {
+    Write-Host "[OK] Found run.bat at: $batchFile" -ForegroundColor Green
 }
 
-Write-Host "Found server.js at: $serverFile" -ForegroundColor Green
-Write-Host "Found run.bat at: $batchFile" -ForegroundColor Green
+if (-not $allFilesExist) {
+    Write-Host ""
+    Write-Host "SETUP FAILED: Required files are missing!" -ForegroundColor Red
+    Write-Host "Please ensure you extracted the full package correctly." -ForegroundColor Yellow
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
 Write-Host ""
 
 # ===========================================
 # STEP 3: Create Log Directory
 # ===========================================
+Write-Host "Setting up log directory..." -ForegroundColor Cyan
 if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    Write-Host "Created log directory: $logDir" -ForegroundColor Green
-    Write-Host ""
+    Write-Host "[OK] Created log directory: $logDir" -ForegroundColor Green
 }
+else {
+    Write-Host "[OK] Log directory exists: $logDir" -ForegroundColor Green
+}
+Write-Host ""
 
 # ===========================================
 # STEP 4: Remove Existing Task
@@ -113,7 +143,7 @@ Write-Host "Checking for existing scheduled task..." -ForegroundColor Cyan
 try {
     $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if ($existingTask) {
-        Write-Host "Found existing task. Removing..." -ForegroundColor Yellow
+        Write-Host "[INFO] Found existing task. Removing..." -ForegroundColor Yellow
         
         # Stop the task if running
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -121,18 +151,16 @@ try {
         
         # Unregister the task
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-        Write-Host "Existing task removed successfully" -ForegroundColor Green
-        Write-Host ""
+        Write-Host "[OK] Existing task removed successfully" -ForegroundColor Green
     }
     else {
-        Write-Host "No existing task found" -ForegroundColor Gray
-        Write-Host ""
+        Write-Host "[INFO] No existing task found" -ForegroundColor Gray
     }
 }
 catch {
-    Write-Host "Warning: Could not remove existing task: $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host ""
+    Write-Host "[WARNING] Could not remove existing task: $($_.Exception.Message)" -ForegroundColor Yellow
 }
+Write-Host ""
 
 # ===========================================
 # STEP 5: Create Scheduled Task
@@ -153,93 +181,83 @@ try {
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     
     # Register the task
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description $taskDescription -Force
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description $taskDescription -Force | Out-Null
     
-    Write-Host "Scheduled task created successfully" -ForegroundColor Green
-    Write-Host "  - Task Name: $taskName" -ForegroundColor Gray
-    Write-Host "  - Trigger: At system startup" -ForegroundColor Gray
-    Write-Host "  - Run Level: Highest privileges" -ForegroundColor Gray
-    Write-Host "  - User: SYSTEM" -ForegroundColor Gray
-    Write-Host ""
+    Write-Host "[OK] Scheduled task created successfully" -ForegroundColor Green
 }
 catch {
-    Write-Host "ERROR: Failed to create scheduled task" -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host "[ERROR] Failed to create scheduled task" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
     Read-Host "Press Enter to exit"
-    exit
+    exit 1
 }
+Write-Host ""
 
 # ===========================================
-# STEP 6: Start Task
+# STEP 6: Start the Task
 # ===========================================
-Write-Host "Starting scheduled task..." -ForegroundColor Cyan
+Write-Host "Starting the task..." -ForegroundColor Cyan
 
 try {
-    Start-ScheduledTask -TaskName $taskName
+    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
     Start-Sleep -Seconds 3
     
-    $task = Get-ScheduledTask -TaskName $taskName
+    # Check task status
     $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
-    
-    Write-Host ""
-    Write-Host "SUCCESS! Task installed and started!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Task Details:" -ForegroundColor White
-    Write-Host "  Name: $taskName" -ForegroundColor Gray
-    Write-Host "  State: $($task.State)" -ForegroundColor Green
-    Write-Host "  Last Run: $($taskInfo.LastRunTime)" -ForegroundColor Gray
-    Write-Host "  Next Run: $($taskInfo.NextRunTime)" -ForegroundColor Gray
-    Write-Host "  Startup Type: Automatic (starts on PC restart)" -ForegroundColor Gray
-    Write-Host "  Logs: $logDir\service.log" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "Your Next.js server will now start automatically when Windows boots!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Test your server by visiting: http://localhost:3000" -ForegroundColor Cyan
+    if ($taskInfo.LastTaskResult -eq 0 -or $taskInfo.LastRunTime -gt (Get-Date).AddMinutes(-1)) {
+        Write-Host "[OK] Task started successfully!" -ForegroundColor Green
+        Write-Host "[INFO] Orbis Ship is now running as a Windows service" -ForegroundColor Green
+        Write-Host "[INFO] The application will start automatically on system boot" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[WARNING] Task may not have started correctly" -ForegroundColor Yellow
+        Write-Host "Last Result: $($taskInfo.LastTaskResult)" -ForegroundColor Gray
+    }
 }
 catch {
-    Write-Host "ERROR: Failed to start scheduled task" -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host "[ERROR] Failed to start scheduled task" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Troubleshooting steps:" -ForegroundColor White
-    Write-Host "1. Check if the batch file exists and is executable:" -ForegroundColor Gray
-    Write-Host "   Test-Path `"$batchFile`"" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "2. Test the batch file manually:" -ForegroundColor Gray
+    Write-Host "TROUBLESHOOTING STEPS:" -ForegroundColor White
+    Write-Host "1. Test the batch file manually:" -ForegroundColor Gray
     Write-Host "   & `"$batchFile`"" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "3. Try starting the task manually:" -ForegroundColor Gray
-    Write-Host "   Start-ScheduledTask -TaskName `"$taskName`"" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "4. Check task logs:" -ForegroundColor Gray
+    Write-Host "2. Check task logs:" -ForegroundColor Gray
     Write-Host "   Get-Content $logDir\service.log -Tail 20" -ForegroundColor DarkGray
     Write-Host ""
 }
 Write-Host ""
 
 # ===========================================
-# MANAGEMENT COMMANDS
+# FINAL STATUS
 # ===========================================
-Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "SETUP COMPLETE!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "TASK MANAGEMENT COMMANDS:" -ForegroundColor White
+Write-Host "NEXT STEPS:" -ForegroundColor White
+Write-Host "1. The Orbis Ship service is now installed and running" -ForegroundColor Gray
+Write-Host "2. Access your application at: http://localhost:3000" -ForegroundColor Gray
+Write-Host "3. The service will start automatically when Windows boots" -ForegroundColor Gray
+Write-Host ""
+Write-Host "MANAGEMENT COMMANDS:" -ForegroundColor White
 Write-Host ""
 Write-Host "  Check Status:" -ForegroundColor White
 Write-Host "    Get-ScheduledTask -TaskName `"$taskName`"" -ForegroundColor Gray
-Write-Host "    Get-ScheduledTaskInfo -TaskName `"$taskName`"" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Start Task:" -ForegroundColor White
+Write-Host "  Start Service:" -ForegroundColor White
 Write-Host "    Start-ScheduledTask -TaskName `"$taskName`"" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Stop Task:" -ForegroundColor White
+Write-Host "  Stop Service:" -ForegroundColor White
 Write-Host "    Stop-ScheduledTask -TaskName `"$taskName`"" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Remove Task:" -ForegroundColor White
+Write-Host "  Remove Service:" -ForegroundColor White
 Write-Host "    Unregister-ScheduledTask -TaskName `"$taskName`" -Confirm:`$false" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  View Logs:" -ForegroundColor White
 Write-Host "    Get-Content $logDir\service.log -Tail 50" -ForegroundColor Gray
 Write-Host ""
-Write-Host "===========================================" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 Read-Host "Press Enter to exit"

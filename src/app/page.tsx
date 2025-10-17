@@ -37,6 +37,12 @@ export default function Home() {
             </a>
             <a
               className="rounded-lg border border-solid border-gray-300 dark:border-gray-600 transition-colors flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 font-medium text-sm h-10 px-4 w-full"
+              href="/updater"
+            >
+              🔄 Auto-Updater
+            </a>
+            <a
+              className="rounded-lg border border-solid border-gray-300 dark:border-gray-600 transition-colors flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 font-medium text-sm h-10 px-4 w-full"
               href="/api/database"
             >
               🗄️ Database Status
