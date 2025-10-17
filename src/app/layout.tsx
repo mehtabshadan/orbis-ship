@@ -31,6 +31,7 @@ export default function RootLayout({
         <AutoUpdaterInitializer />
         {children}
       </body>
+      V.0.0.10
     </html>
   );
 }
